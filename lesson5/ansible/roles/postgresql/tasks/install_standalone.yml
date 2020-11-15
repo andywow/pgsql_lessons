@@ -1,0 +1,59 @@
+---
+
+# ubuntu image was created before ubuntu repo update
+- name: force cache update
+  command: apt-get update
+  become: yes
+  changed_when: yes
+
+- name: add an postgresql repo signing key
+  apt_key:
+    url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+    state: present
+  loop:
+  - 7FCC7D46ACCC4CF8
+  become: yes
+
+- name: add postgresql package repository
+  apt_repository:
+    repo: "deb http://apt.postgresql.org/pub/repos/apt focal-pgdg main"
+    filename: pgdg
+    state: present
+    validate_certs: no
+  become: yes
+
+- name: install postgresql package
+  apt:
+    name: postgresql
+    state: latest
+  become: yes
+
+- name: get cluster state
+  command: sudo -u postgres pg_lsclusters
+  become: yes
+  changed_when: False
+  register: pgsql_cluster_state
+
+- name: show cluster state
+  debug:
+    msg: "{{ pgsql_cluster_state.stdout_lines }}"
+
+- name: transfer sql file
+  copy:
+    dest: /tmp/create_table.sql
+    src: sql/create_table.sql
+
+- name: run psql commands
+  command: sudo -u postgres psql -f /tmp/create_table.sql
+  become: yes
+  changed_when: True
+  register: psql_cmd_state
+
+- name: show psql output
+  debug:
+    msg: "{{ psql_cmd_state.stdout_lines }}"
+
+- name: stop pgsql cluster
+  command: pg_ctlcluster 13 main stop
+  changed_when: True
+  become: yes

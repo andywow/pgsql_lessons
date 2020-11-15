@@ -1,0 +1,108 @@
+---
+
+# ubuntu image was created before ubuntu repo update
+- name: force cache update
+  command: apt-get update
+  become: yes
+  changed_when: yes
+
+- name: add an docker repo signing key
+  apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+  become: yes
+
+- name: add docker package repository
+  apt_repository:
+    repo: "deb https://download.docker.com/linux/ubuntu focal stable"
+    filename: docker
+    state: present
+  become: yes
+
+- name: install docker package
+  apt:
+    name: "{{ item }}"
+    state: latest
+  loop:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  become: yes
+
+- name: install pip
+  apt:
+    name: python3-pip
+  become: yes
+
+- name: Install py module
+  pip:
+    name: docker
+  become: yes
+
+- name: Create postgresql data directory
+  file:
+    name: /var/lib/postgresql
+    state: directory
+    mode: '0775'
+    group: 999
+  become: yes
+
+- name: Transfer init script
+  copy:
+    src: files/scripts/init.sh
+    dest: /tmp/init.sh
+    mode: '0775'
+
+- name: Create postgresql server container
+  docker_container:
+    name: postgresql
+    image: postgres:13.1
+    state: started
+    recreate: yes
+    env:
+      POSTGRES_PASSWORD: "{{ postgresql_password }}"
+      POSTGRES_DB: "{{ postgresql_database }}"
+    published_ports:
+      - 5432:5432
+    volumes:
+      - /var/lib/postgresql:/var/lib/postgresql:rw
+      - /tmp/init.sh:/docker-entrypoint-initdb.d/create_table.sh:ro
+  become: yes
+
+- name: transfer sql file
+  copy:
+    dest: /tmp/select_from_table.sql
+    src: sql/select_from_table.sql
+
+- name: run client container
+  command:
+    argv:
+      - docker
+      - run
+      - --rm
+      - --entrypoint
+      - psql
+      - -e
+      - "PGPASSWORD={{ postgresql_password }}"
+      - -v
+      - /tmp/select_from_table.sql:/tmp/select_from_table.sql
+      - --net=host
+      - postgres:13.1
+      - -v
+      - ON_ERROR_STOP=1
+      - -f
+      - /tmp/select_from_table.sql
+      - -h
+      - 127.0.0.1
+      - -p
+      - 5432
+      - -U
+      - postgres
+      - -w
+      - "{{ postgresql_database }}"
+  become: yes
+  register: client_output
+
+- name: print client output
+  debug:
+    msg: "{{ client_output.stdout_lines }}"

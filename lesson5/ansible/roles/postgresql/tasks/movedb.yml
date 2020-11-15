@@ -1,0 +1,85 @@
+---
+
+- name: Create a ext4 filesystem on /dev/sdb
+  filesystem:
+    fstype: ext4
+    dev: /dev/sdb
+  become: yes
+
+- name: Mount up device /dev/sdb
+  mount:
+    path: /mnt/data
+    src: /dev/sdb
+    fstype: ext4
+    state: mounted
+  become: yes
+
+- name: Chown mnt directory
+  file:
+    name: /mnt/data
+    state: directory
+    owner: postgres
+    group: postgres
+  become: yes
+
+- name: Check if old database data dir exists
+  stat:
+    path: /var/lib/postgresql/13
+  register: stat_db_data_dir
+
+- name: Move database
+  command: mv /var/lib/postgresql/13 /mnt/data
+  become: yes
+  when: stat_db_data_dir.stat.exists
+  changed_when: True
+
+- name: Start database
+  command: sudo -u postgres pg_ctlcluster 13 main start
+  become: yes
+  changed_when: True
+  register: pgsql_start_cluster
+  ignore_errors: True
+
+- name: Output start cluster
+  debug:
+    msg: "{{ pgsql_start_cluster.stdout_lines }}"
+
+- name: Modify postgresql config
+  lineinfile:
+    path: /etc/postgresql/13/main/postgresql.conf
+    regexp: '^data_directory.*'
+    line: "data_directory = '/mnt/data/13/main'"
+  become: yes
+
+- name: Start database
+  shell: sudo -u postgres pg_ctlcluster 13 main status || sudo -u postgres pg_ctlcluster 13 main start
+  become: yes
+  changed_when: True
+  register: pgsql_start_cluster
+
+- name: transfer sql file
+  copy:
+    dest: /tmp/select_from_table.sql
+    src: sql/select_from_table.sql
+
+- name: run psql commands
+  command: sudo -u postgres psql -f /tmp/select_from_table.sql
+  become: yes
+  changed_when: True
+  register: psql_cmd_state
+
+- name: show psql output
+  debug:
+    msg: "{{ psql_cmd_state.stdout_lines }}"
+
+- name: Stop database
+  shell: sudo -u postgres pg_ctlcluster 13 main stop
+  become: yes
+  changed_when: True
+  register: pgsql_start_cluster
+
+- name: Mount down device /dev/sdb
+  mount:
+    path: /mnt/data
+    state: absent
+  become: yes

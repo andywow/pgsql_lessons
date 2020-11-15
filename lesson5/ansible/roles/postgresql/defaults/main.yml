@@ -1,0 +1,6 @@
+# install mode: standalone / docker
+postgresql_install_mode: standalone
+# postgresql password
+postgresql_password: Xcv432_RT
+# postgresql database
+postgresql_database: mydb

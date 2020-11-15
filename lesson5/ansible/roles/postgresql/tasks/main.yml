@@ -1,0 +1,13 @@
+---
+
+- name: include standalone install
+  include_tasks: "{{ role_path }}/tasks/install_standalone.yml"
+  when: postgresql_install_mode == 'standalone'
+
+- name: include movedb
+  include_tasks: "{{ role_path }}/tasks/movedb.yml"
+  when: postgresql_install_mode == 'movedb'
+
+- name: include docker
+  include_tasks: "{{ role_path }}/tasks/install_docker.yml"
+  when: postgresql_install_mode == 'docker'

@@ -1,0 +1,6 @@
+{
+  "terraform-ls.rootModules": [
+      "./lesson5/terraform",
+      "./lesson5/terraform/modules/db",
+  ]
+}
